@@ -1,5 +1,9 @@
 export * from '@prisma/client';
 export { PrismaClient } from '@prisma/client';
+export { AuditLogger } from './audit-logger';
+export type { AuditContext, AuditEvent } from './audit-logger';
+export { DataExporter, DataImporter } from './data-export';
+export type { ExportOptions, ExportFormat, ExportType } from './data-export';
 
 import { PrismaClient } from '@prisma/client';
 

@@ -23,7 +23,9 @@
     "jsonwebtoken": "^9.0.2",
     "openai": "^4.26.0",
     "@anthropic-ai/sdk": "^0.17.0",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "@nexus-studio/billing": "workspace:*",
+    "@nexus-studio/database": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

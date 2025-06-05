@@ -6,9 +6,14 @@ import { projectRoutes } from './routes/projects';
 import { componentRoutes } from './routes/components';
 import { deploymentRoutes } from './routes/deployments';
 import { ai } from './routes/ai';
+import { billing } from './routes/billing';
+import { sso } from './routes/sso';
+import { dataTransfer } from './routes/data-transfer';
+import { backup } from './routes/backup';
 import { createYoga } from 'graphql-yoga';
 import { schema } from './graphql/schema';
 import { authMiddleware } from './middleware/auth';
+import { auditMiddleware, createAuditRoutes } from './middleware/audit';
 import Redis from 'ioredis';
 
 const app = new Hono();
@@ -42,6 +47,12 @@ app.use('*', async (c, next) => {
 // Auth middleware
 app.use('*', authMiddleware);
 
+// Audit middleware for sensitive routes
+app.use('/projects/*', auditMiddleware);
+app.use('/auth/*', auditMiddleware);
+app.use('/billing/*', auditMiddleware);
+app.use('/deployments/*', auditMiddleware);
+
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
@@ -51,6 +62,11 @@ app.route('/projects', projectRoutes);
 app.route('/components', componentRoutes);
 app.route('/deployments', deploymentRoutes);
 app.route('/ai', ai);
+app.route('/billing', billing);
+app.route('/sso', sso);
+app.route('/audit', createAuditRoutes());
+app.route('/data', dataTransfer);
+app.route('/admin', backup);
 
 // GraphQL endpoint
 const yoga = createYoga({

@@ -7,77 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Organizations for true multi-tenancy
-model Organization {
-  id                String             @id @default(cuid())
-  name              String
-  slug              String             @unique
-  logo              String?
-  description       String?
-  website           String?
-  
-  // Billing
-  plan              PricingPlan        @default(FREE)
-  planLimits        Json               @default("{}")
-  stripeCustomerId  String?            @unique
-  billingEmail      String?
-  taxId             String?
-  
-  // Settings
-  settings          Json               @default("{}")
-  features          String[]           @default([])
-  
-  // Timestamps
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  deletedAt         DateTime?
-  
-  // Relations
-  members           OrganizationMember[]
-  projects          Project[]
-  invitations       OrganizationInvitation[]
-  apiKeys           ApiKey[]
-  subscription      Subscription?
-  payments          Payment[]
-  usage             Usage[]
-  auditLogs         AuditLog[]
-  webhooks          Webhook[]
-  ssoConfigs        SSOConfig[]
-  
-  @@index([slug])
-}
-
-model OrganizationMember {
-  id              String   @id @default(cuid())
-  organizationId  String
-  userId          String
-  role            OrganizationRole
-  joinedAt        DateTime @default(now())
-  
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@unique([organizationId, userId])
-  @@index([organizationId])
-  @@index([userId])
-}
-
-model OrganizationInvitation {
-  id              String   @id @default(cuid())
-  organizationId  String
-  email           String
-  role            OrganizationRole
-  token           String   @unique
-  expiresAt       DateTime
-  acceptedAt      DateTime?
-  createdAt       DateTime @default(now())
-  
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
-  @@index([token])
-  @@index([email])
-}
-
 model User {
   id                String             @id @default(cuid())
   email             String             @unique
@@ -90,17 +19,15 @@ model User {
   provider          AuthProvider?
   providerId        String?
   role              UserRole           @default(USER)
+  plan              PricingPlan        @default(FREE)
+  planExpiresAt     DateTime?
   stripeCustomerId  String?            @unique
-  
-  // Timestamps
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   deletedAt         DateTime?
-  lastLoginAt       DateTime?
   
   // Relations
-  organizations     OrganizationMember[]
-  projects          Project[]          // Personal projects
+  projects          Project[]
   projectMembers    ProjectMember[]
   apiKeys           ApiKey[]
   sessions          Session[]
@@ -113,260 +40,6 @@ model User {
   @@index([stripeCustomerId])
 }
 
-// Enhanced Subscription model
-model Subscription {
-  id                    String   @id @default(cuid())
-  organizationId        String   @unique
-  stripeCustomerId      String
-  stripeSubscriptionId  String   @unique
-  stripePriceId         String
-  
-  plan                  PricingPlan
-  billingPeriod         BillingPeriod
-  status                SubscriptionStatus
-  
-  currentPeriodStart    DateTime
-  currentPeriodEnd      DateTime
-  cancelAtPeriodEnd     Boolean  @default(false)
-  canceledAt            DateTime?
-  trialEnd              DateTime?
-  
-  metadata              Json     @default("{}")
-  
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
-  @@index([stripeSubscriptionId])
-}
-
-// Payment history
-model Payment {
-  id                    String   @id @default(cuid())
-  organizationId        String
-  stripeInvoiceId       String   @unique
-  stripePaymentIntentId String?
-  
-  amount                Int
-  currency              String
-  status                PaymentStatus
-  description           String?
-  
-  metadata              Json     @default("{}")
-  
-  createdAt             DateTime @default(now())
-  
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
-  @@index([organizationId])
-  @@index([status])
-}
-
-// Usage tracking
-model Usage {
-  id              String   @id @default(cuid())
-  organizationId  String
-  period          DateTime // First day of the month
-  
-  // Metrics
-  projects        Int      @default(0)
-  teamMembers     Int      @default(0)
-  storage         Float    @default(0) // GB
-  deployments     Int      @default(0)
-  apiRequests     Int      @default(0)
-  aiRequests      Int      @default(0)
-  bandwidth       Float    @default(0) // GB
-  
-  // Custom metrics
-  customMetrics   Json     @default("{}")
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
-  @@unique([organizationId, period])
-  @@index([organizationId])
-  @@index([period])
-}
-
-// Webhook events for Stripe
-model WebhookEvent {
-  id              String   @id @default(cuid())
-  stripeEventId   String   @unique
-  type            String
-  processed       Boolean  @default(false)
-  error           String?
-  data            Json
-  
-  createdAt       DateTime @default(now())
-  
-  @@index([type])
-  @@index([processed])
-}
-
-// Payment methods
-model PaymentMethod {
-  id                    String   @id @default(cuid())
-  stripePaymentMethodId String   @unique
-  stripeCustomerId      String
-  
-  type                  String
-  card                  Json?    // Card details (last4, brand, etc)
-  isDefault             Boolean  @default(false)
-  
-  createdAt             DateTime @default(now())
-  
-  @@index([stripeCustomerId])
-}
-
-// SSO Configuration
-model SSOConfig {
-  id              String   @id @default(cuid())
-  organizationId  String
-  provider        SSOProvider
-  
-  // SAML Config
-  entryPoint      String?
-  issuer          String?
-  certificate     String?
-  
-  // OIDC Config
-  clientId        String?
-  clientSecret    String?
-  discoveryUrl    String?
-  
-  isActive        Boolean  @default(false)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
-  @@unique([organizationId, provider])
-}
-
-// Webhooks for organizations
-model Webhook {
-  id              String   @id @default(cuid())
-  organizationId  String
-  url             String
-  events          String[]
-  secret          String
-  isActive        Boolean  @default(true)
-  
-  lastTriggeredAt DateTime?
-  failureCount    Int      @default(0)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
-  @@index([organizationId])
-}
-
-// Analytics Events
-model AnalyticsEvent {
-  id              String   @id @default(cuid())
-  organizationId  String?
-  projectId       String?
-  userId          String?
-  
-  eventType       String
-  eventData       Json     @default("{}")
-  
-  // Context
-  sessionId       String?
-  ipAddress       String?
-  userAgent       String?
-  referrer        String?
-  
-  createdAt       DateTime @default(now())
-  
-  @@index([organizationId])
-  @@index([projectId])
-  @@index([userId])
-  @@index([eventType])
-  @@index([createdAt])
-}
-
-// Export/Import Jobs
-model DataExport {
-  id              String   @id @default(cuid())
-  organizationId  String
-  userId          String
-  
-  type            ExportType
-  status          JobStatus
-  format          ExportFormat
-  
-  fileUrl         String?
-  error           String?
-  
-  startedAt       DateTime @default(now())
-  completedAt     DateTime?
-  expiresAt       DateTime?
-  
-  @@index([organizationId])
-  @@index([userId])
-  @@index([status])
-}
-
-// Enhanced Project model with organization support
-model Project {
-  id               String             @id @default(cuid())
-  name             String
-  slug             String
-  description      String?
-  icon             String?
-  
-  // Ownership
-  organizationId   String?            // Organization-owned
-  ownerId          String             // User who created it
-  
-  type             ProjectType
-  status           ProjectStatus      @default(DRAFT)
-  visibility       ProjectVisibility  @default(PRIVATE)
-  settings         Json               @default("{}")
-  metadata         Json               @default("{}")
-  
-  // Domain settings
-  publishedVersion String?
-  domain           String?            @unique
-  customDomains    String[]           @default([])
-  sslEnabled       Boolean            @default(true)
-  
-  // Timestamps
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  deletedAt        DateTime?
-  
-  // Relations
-  organization     Organization?      @relation(fields: [organizationId], references: [id])
-  owner            User               @relation(fields: [ownerId], references: [id])
-  members          ProjectMember[]
-  pages            Page[]
-  components       Component[]
-  assets           Asset[]
-  apis             Api[]
-  databases        Database[]
-  workflows        Workflow[]
-  deployments      Deployment[]
-  versions         Version[]
-  collaborations   Collaboration[]
-  auditLogs        AuditLog[]
-  analytics        Analytics[]
-  
-  @@unique([organizationId, slug])
-  @@index([slug])
-  @@index([organizationId])
-  @@index([ownerId])
-  @@index([domain])
-}
-
-// Keep all other existing models...
 model Session {
   id        String   @id @default(cuid())
   userId    String
@@ -382,25 +55,60 @@ model Session {
 
 model ApiKey {
   id          String    @id @default(cuid())
+  userId      String
   name        String
   key         String    @unique
   permissions String[]
-  
-  // Can belong to user or organization
-  userId      String?
-  organizationId String?
-  
   lastUsedAt  DateTime?
   expiresAt   DateTime?
   createdAt   DateTime  @default(now())
   revokedAt   DateTime?
   
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@index([key])
   @@index([userId])
-  @@index([organizationId])
+}
+
+model Project {
+  id               String             @id @default(cuid())
+  name             String
+  slug             String             @unique
+  description      String?
+  icon             String?
+  ownerId          String
+  type             ProjectType
+  status           ProjectStatus      @default(DRAFT)
+  visibility       ProjectVisibility  @default(PRIVATE)
+  settings         Json               @default("{}")
+  metadata         Json               @default("{}")
+  publishedVersion String?
+  domain           String?            @unique
+  customDomain     String?            @unique
+  sslEnabled       Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  deletedAt        DateTime?
+  
+  // Relations
+  owner            User               @relation(fields: [ownerId], references: [id])
+  members          ProjectMember[]
+  pages            Page[]
+  components       Component[]
+  assets           Asset[]
+  apis             Api[]
+  databases        Database[]
+  workflows        Workflow[]
+  deployments      Deployment[]
+  versions         Version[]
+  collaborations   Collaboration[]
+  auditLogs        AuditLog[]
+  analytics        Analytics[]
+  
+  @@index([slug])
+  @@index([ownerId])
+  @@index([domain])
+  @@index([customDomain])
 }
 
 model ProjectMember {
@@ -601,7 +309,6 @@ model Deployment {
   environment DeploymentEnvironment
   status      DeploymentStatus
   url         String?
-  size        Int?               // Size in bytes
   buildLog    String?
   error       String?
   metadata    Json               @default("{}")
@@ -707,26 +414,20 @@ model Template {
 
 model AuditLog {
   id          String      @id @default(cuid())
-  userId      String?
-  organizationId String?
+  userId      String
   projectId   String?
-  
   action      AuditAction
-  resourceType String
-  resourceId  String
-  
+  entity      String
+  entityId    String
   metadata    Json        @default("{}")
   ipAddress   String?
   userAgent   String?
-  
   timestamp   DateTime    @default(now())
   
-  user    User?     @relation(fields: [userId], references: [id])
-  organization Organization? @relation(fields: [organizationId], references: [id])
+  user    User     @relation(fields: [userId], references: [id])
   project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   
   @@index([userId])
-  @@index([organizationId])
   @@index([projectId])
   @@index([action])
   @@index([timestamp])
@@ -778,70 +479,11 @@ enum UserRole {
   SUPER_ADMIN
 }
 
-enum OrganizationRole {
-  MEMBER
-  ADMIN
-  OWNER
-}
-
 enum PricingPlan {
   FREE
   STARTER
   PRO
   ENTERPRISE
-}
-
-enum BillingPeriod {
-  MONTHLY
-  YEARLY
-}
-
-enum SubscriptionStatus {
-  ACTIVE
-  PAST_DUE
-  CANCELED
-  INCOMPLETE
-  INCOMPLETE_EXPIRED
-  TRIALING
-  PAUSED
-}
-
-enum PaymentStatus {
-  PENDING
-  SUCCEEDED
-  FAILED
-  REFUNDED
-  PARTIALLY_REFUNDED
-}
-
-enum SSOProvider {
-  SAML
-  OIDC
-  AZURE_AD
-  OKTA
-  AUTH0
-}
-
-enum ExportType {
-  PROJECT
-  ORGANIZATION
-  USER_DATA
-  ANALYTICS
-  AUDIT_LOGS
-}
-
-enum ExportFormat {
-  JSON
-  CSV
-  ZIP
-}
-
-enum JobStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  CANCELLED
 }
 
 enum ProjectType {
@@ -982,14 +624,6 @@ enum AuditAction {
   SHARE
   LOGIN
   LOGOUT
-  INVITE_SENT
-  INVITE_ACCEPTED
-  BILLING_UPDATED
-  SUBSCRIPTION_CREATED
-  SUBSCRIPTION_CANCELLED
-  PAYMENT_SUCCEEDED
-  PAYMENT_FAILED
-  INVOICE_SENT
 }
 
 enum AnalyticsEvent {
@@ -1009,7 +643,4 @@ enum NotificationType {
   COLLABORATION
   DEPLOYMENT
   SYSTEM
-  BILLING
-  USAGE_LIMIT
-  INVITATION
 }
