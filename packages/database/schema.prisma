@@ -1,0 +1,646 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String             @id @default(cuid())
+  email             String             @unique
+  name              String?
+  avatar            String?
+  password          String?
+  emailVerified     DateTime?
+  twoFactorEnabled  Boolean            @default(false)
+  twoFactorSecret   String?
+  provider          AuthProvider?
+  providerId        String?
+  role              UserRole           @default(USER)
+  plan              PricingPlan        @default(FREE)
+  planExpiresAt     DateTime?
+  stripeCustomerId  String?            @unique
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+  
+  // Relations
+  projects          Project[]
+  projectMembers    ProjectMember[]
+  apiKeys           ApiKey[]
+  sessions          Session[]
+  auditLogs         AuditLog[]
+  deployments       Deployment[]
+  collaborations    Collaboration[]
+  notifications     Notification[]
+  
+  @@index([email])
+  @@index([stripeCustomerId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([token])
+  @@index([userId])
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  key         String    @unique
+  permissions String[]
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([key])
+  @@index([userId])
+}
+
+model Project {
+  id               String             @id @default(cuid())
+  name             String
+  slug             String             @unique
+  description      String?
+  icon             String?
+  ownerId          String
+  type             ProjectType
+  status           ProjectStatus      @default(DRAFT)
+  visibility       ProjectVisibility  @default(PRIVATE)
+  settings         Json               @default("{}")
+  metadata         Json               @default("{}")
+  publishedVersion String?
+  domain           String?            @unique
+  customDomain     String?            @unique
+  sslEnabled       Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  deletedAt        DateTime?
+  
+  // Relations
+  owner            User               @relation(fields: [ownerId], references: [id])
+  members          ProjectMember[]
+  pages            Page[]
+  components       Component[]
+  assets           Asset[]
+  apis             Api[]
+  databases        Database[]
+  workflows        Workflow[]
+  deployments      Deployment[]
+  versions         Version[]
+  collaborations   Collaboration[]
+  auditLogs        AuditLog[]
+  analytics        Analytics[]
+  
+  @@index([slug])
+  @@index([ownerId])
+  @@index([domain])
+  @@index([customDomain])
+}
+
+model ProjectMember {
+  id        String                 @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectRole
+  joinedAt  DateTime               @default(now())
+  
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model Page {
+  id          String        @id @default(cuid())
+  projectId   String
+  name        String
+  path        String
+  title       String?
+  description String?
+  content     Json
+  settings    Json          @default("{}")
+  isHomePage  Boolean       @default(false)
+  status      PageStatus    @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  seo       PageSeo?
+  
+  @@unique([projectId, path])
+  @@index([projectId])
+}
+
+model PageSeo {
+  id               String  @id @default(cuid())
+  pageId           String  @unique
+  metaTitle        String?
+  metaDescription  String?
+  metaKeywords     String[]
+  ogTitle          String?
+  ogDescription    String?
+  ogImage          String?
+  twitterCard      String?
+  canonicalUrl     String?
+  robots           String?
+  
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+}
+
+model Component {
+  id          String          @id @default(cuid())
+  projectId   String?
+  name        String
+  type        ComponentType
+  category    String
+  props       Json            @default("{}")
+  styles      Json            @default("{}")
+  events      Json            @default("{}")
+  children    Json            @default("[]")
+  isGlobal    Boolean         @default(false)
+  isLocked    Boolean         @default(false)
+  version     String          @default("1.0.0")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  
+  project     Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  instances   ComponentInstance[]
+  
+  @@index([projectId])
+  @@index([type])
+  @@index([isGlobal])
+}
+
+model ComponentInstance {
+  id          String   @id @default(cuid())
+  componentId String
+  pageId      String?
+  parentId    String?
+  props       Json     @default("{}")
+  styles      Json     @default("{}")
+  order       Int      @default(0)
+  
+  component Component @relation(fields: [componentId], references: [id])
+  
+  @@index([componentId])
+  @@index([pageId])
+  @@index([parentId])
+}
+
+model Asset {
+  id          String      @id @default(cuid())
+  projectId   String
+  name        String
+  type        AssetType
+  url         String
+  size        Int
+  mimeType    String
+  metadata    Json        @default("{}")
+  uploadedAt  DateTime    @default(now())
+  
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
+  @@index([type])
+}
+
+model Api {
+  id          String       @id @default(cuid())
+  projectId   String
+  name        String
+  method      HttpMethod
+  endpoint    String
+  headers     Json         @default("{}")
+  query       Json         @default("{}")
+  body        Json         @default("{}")
+  response    Json         @default("{}")
+  auth        ApiAuthType?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
+}
+
+model Database {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  type        DatabaseType
+  schema      Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tables  Table[]
+  
+  @@index([projectId])
+}
+
+model Table {
+  id          String   @id @default(cuid())
+  databaseId  String
+  name        String
+  columns     Json
+  indexes     Json     @default("[]")
+  relations   Json     @default("[]")
+  
+  database Database @relation(fields: [databaseId], references: [id], onDelete: Cascade)
+  
+  @@index([databaseId])
+}
+
+model Workflow {
+  id          String         @id @default(cuid())
+  projectId   String
+  name        String
+  description String?
+  trigger     WorkflowTrigger
+  nodes       Json
+  edges       Json
+  isActive    Boolean        @default(false)
+  lastRunAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executions  WorkflowExecution[]
+  
+  @@index([projectId])
+}
+
+model WorkflowExecution {
+  id          String              @id @default(cuid())
+  workflowId  String
+  status      WorkflowStatus
+  startedAt   DateTime            @default(now())
+  completedAt DateTime?
+  error       String?
+  context     Json
+  
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  
+  @@index([workflowId])
+  @@index([status])
+}
+
+model Deployment {
+  id          String             @id @default(cuid())
+  projectId   String
+  userId      String
+  version     String
+  environment DeploymentEnvironment
+  status      DeploymentStatus
+  url         String?
+  buildLog    String?
+  error       String?
+  metadata    Json               @default("{}")
+  startedAt   DateTime           @default(now())
+  completedAt DateTime?
+  
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+  
+  @@index([projectId])
+  @@index([userId])
+  @@index([status])
+}
+
+model Version {
+  id          String   @id @default(cuid())
+  projectId   String
+  version     String
+  changelog   String?
+  snapshot    Json
+  createdAt   DateTime @default(now())
+  
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@unique([projectId, version])
+  @@index([projectId])
+}
+
+model Collaboration {
+  id          String   @id @default(cuid())
+  projectId   String
+  userId      String
+  pageId      String?
+  cursor      Json
+  selection   Json?
+  isActive    Boolean  @default(true)
+  lastSeenAt  DateTime @default(now())
+  
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
+  @@index([userId])
+}
+
+model Plugin {
+  id            String         @id @default(cuid())
+  name          String
+  slug          String         @unique
+  description   String
+  version       String
+  author        String
+  icon          String?
+  category      PluginCategory
+  permissions   String[]
+  config        Json           @default("{}")
+  code          String
+  isPublic      Boolean        @default(false)
+  isVerified    Boolean        @default(false)
+  downloads     Int            @default(0)
+  rating        Float          @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  installations PluginInstallation[]
+  
+  @@index([slug])
+  @@index([category])
+}
+
+model PluginInstallation {
+  id          String   @id @default(cuid())
+  pluginId    String
+  projectId   String
+  isActive    Boolean  @default(true)
+  config      Json     @default("{}")
+  installedAt DateTime @default(now())
+  
+  plugin Plugin @relation(fields: [pluginId], references: [id])
+  
+  @@unique([pluginId, projectId])
+  @@index([projectId])
+}
+
+model Template {
+  id          String           @id @default(cuid())
+  name        String
+  slug        String           @unique
+  description String
+  preview     String
+  category    TemplateCategory
+  tags        String[]
+  config      Json
+  isPublic    Boolean          @default(true)
+  isFeatured  Boolean          @default(false)
+  uses        Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  
+  @@index([slug])
+  @@index([category])
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  userId      String
+  projectId   String?
+  action      AuditAction
+  entity      String
+  entityId    String
+  metadata    Json        @default("{}")
+  ipAddress   String?
+  userAgent   String?
+  timestamp   DateTime    @default(now())
+  
+  user    User     @relation(fields: [userId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([projectId])
+  @@index([action])
+  @@index([timestamp])
+}
+
+model Analytics {
+  id          String        @id @default(cuid())
+  projectId   String
+  event       AnalyticsEvent
+  pageId      String?
+  sessionId   String
+  userId      String?
+  data        Json          @default("{}")
+  timestamp   DateTime      @default(now())
+  
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
+  @@index([event])
+  @@index([timestamp])
+}
+
+model Notification {
+  id          String              @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String
+  data        Json                @default("{}")
+  isRead      Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([isRead])
+}
+
+// Enums
+enum AuthProvider {
+  GOOGLE
+  GITHUB
+  MICROSOFT
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum PricingPlan {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum ProjectType {
+  WEB
+  MOBILE
+  DESKTOP
+  API
+}
+
+enum ProjectStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ProjectVisibility {
+  PRIVATE
+  PUBLIC
+  UNLISTED
+}
+
+enum ProjectRole {
+  VIEWER
+  EDITOR
+  ADMIN
+  OWNER
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ComponentType {
+  LAYOUT
+  FORM
+  DATA
+  MEDIA
+  NAVIGATION
+  CUSTOM
+}
+
+enum AssetType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  FONT
+  OTHER
+}
+
+enum HttpMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+}
+
+enum ApiAuthType {
+  NONE
+  API_KEY
+  BEARER
+  BASIC
+  OAUTH2
+}
+
+enum DatabaseType {
+  POSTGRESQL
+  MYSQL
+  MONGODB
+  SUPABASE
+  FIREBASE
+}
+
+enum WorkflowTrigger {
+  MANUAL
+  SCHEDULE
+  WEBHOOK
+  EVENT
+  API
+}
+
+enum WorkflowStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum DeploymentEnvironment {
+  DEVELOPMENT
+  STAGING
+  PRODUCTION
+}
+
+enum DeploymentStatus {
+  PENDING
+  BUILDING
+  DEPLOYING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum PluginCategory {
+  UI_COMPONENT
+  DATA_SOURCE
+  INTEGRATION
+  ANALYTICS
+  AUTOMATION
+  SECURITY
+  OTHER
+}
+
+enum TemplateCategory {
+  LANDING_PAGE
+  DASHBOARD
+  E_COMMERCE
+  BLOG
+  PORTFOLIO
+  ADMIN
+  MOBILE_APP
+  OTHER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  EXPORT
+  IMPORT
+  PUBLISH
+  DEPLOY
+  SHARE
+  LOGIN
+  LOGOUT
+}
+
+enum AnalyticsEvent {
+  PAGE_VIEW
+  COMPONENT_CLICK
+  FORM_SUBMIT
+  API_CALL
+  ERROR
+  CUSTOM
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  COLLABORATION
+  DEPLOYMENT
+  SYSTEM
+}
