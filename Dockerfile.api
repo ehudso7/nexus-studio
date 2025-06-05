@@ -1,0 +1,64 @@
+# Build stage
+FROM node:20-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml* ./
+COPY services/api/package.json ./services/api/
+COPY packages/*/package.json ./packages/*/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --prod=false
+
+# Copy source code
+COPY . .
+
+# Generate Prisma client
+RUN cd services/api && npx prisma generate
+
+# Build the application
+RUN pnpm --filter @nexus/api build
+
+# Production stage
+FROM node:20-alpine AS runner
+
+# Add non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S api -u 1001
+
+# Install runtime dependencies
+RUN apk add --no-cache curl
+
+WORKDIR /app
+
+# Copy built application and dependencies
+COPY --from=builder --chown=api:nodejs /app/services/api/dist ./services/api/dist
+COPY --from=builder --chown=api:nodejs /app/services/api/package.json ./services/api/
+COPY --from=builder --chown=api:nodejs /app/services/api/prisma ./services/api/prisma
+COPY --from=builder --chown=api:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=api:nodejs /app/package.json ./
+
+# Create logs directory
+RUN mkdir -p logs && chown -R api:nodejs logs
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3001
+
+USER api
+
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:3001/health || exit 1
+
+# Start the application
+CMD ["node", "services/api/dist/server.js"]
