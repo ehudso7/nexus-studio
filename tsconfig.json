@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@nexus/database": ["./packages/database/src"],
+      "@nexus/auth": ["./packages/auth/src"],
+      "@nexus/canvas-engine": ["./packages/canvas-engine/src"],
+      "@nexus/code-generator": ["./packages/code-generator/src"],
+      "@nexus/deployment": ["./packages/deployment/src"],
+      "@nexus/ui": ["./packages/ui/src"],
+      "@nexus/shared": ["./packages/shared/src"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "dist", ".next", ".turbo"]
+}
