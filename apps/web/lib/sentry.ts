@@ -1,3 +1,4 @@
+import React from 'react';
 import * as Sentry from '@sentry/nextjs';
 import { CaptureConsole } from '@sentry/integrations';
 

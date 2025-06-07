@@ -1,4 +1,4 @@
-import { PrismaClient } from '@nexus-studio/database'
+import { PrismaClient } from '@nexus/database'
 import { SAMLProvider } from './saml-provider'
 import { OIDCProvider } from './oidc-provider'
 import { SSOConfig, SSOProvider, SSOUser, SAMLConfigSchema, OIDCConfigSchema } from './types'

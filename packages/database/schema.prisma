@@ -735,7 +735,7 @@ model AuditLog {
 model Analytics {
   id          String        @id @default(cuid())
   projectId   String
-  event       AnalyticsEvent
+  event       EventType
   pageId      String?
   sessionId   String
   userId      String?
@@ -992,7 +992,7 @@ enum AuditAction {
   INVOICE_SENT
 }
 
-enum AnalyticsEvent {
+enum EventType {
   PAGE_VIEW
   COMPONENT_CLICK
   FORM_SUBMIT

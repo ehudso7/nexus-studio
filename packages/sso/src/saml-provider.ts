@@ -1,5 +1,5 @@
 import { Strategy as SamlStrategy, SamlConfig } from '@node-saml/passport-saml'
-import { PrismaClient } from '@nexus-studio/database'
+import { PrismaClient } from '@nexus/database'
 import crypto from 'crypto'
 import { SSOConfig, SSOUser, SAMLResponse, AttributeMapping } from './types'
 

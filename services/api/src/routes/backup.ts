@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { BackupService } from '@nexus-studio/database/src/backup-service'
+import { BackupService } from '@nexus/database/src/backup-service'
 import { requireAuth } from '../middleware/auth'
-import { prisma } from '@nexus-studio/database'
+import { prisma } from '@nexus/database'
 
 const backup = new Hono()
 

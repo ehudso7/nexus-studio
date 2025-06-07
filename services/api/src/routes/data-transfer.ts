@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { DataExporter, DataImporter } from '@nexus-studio/database/src/data-export'
-import { AuditLogger } from '@nexus-studio/database'
+import { DataExporter, DataImporter } from '@nexus/database/src/data-export'
+import { AuditLogger } from '@nexus/database'
 import { requireAuth } from '../middleware/auth'
-import { prisma } from '@nexus-studio/database'
+import { prisma } from '@nexus/database'
 import { createReadStream, unlink } from 'fs'
 import { promisify } from 'util'
 

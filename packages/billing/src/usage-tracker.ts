@@ -1,4 +1,4 @@
-import { PrismaClient } from '@nexus-studio/database'
+import { PrismaClient } from '@nexus/database'
 import { PLAN_LIMITS } from './types'
 
 export class UsageTracker {

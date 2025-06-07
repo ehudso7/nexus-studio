@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nexus-studio/database": "workspace:*",
-    "@nexus-studio/auth": "workspace:*",
+    "@nexus/database": "workspace:*",
+    "@nexus/auth": "workspace:*",
     "stripe": "^14.10.0",
     "zod": "^3.22.4"
   },

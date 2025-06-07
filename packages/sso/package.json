@@ -9,8 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nexus-studio/database": "workspace:*",
-    "@nexus-studio/auth": "workspace:*",
+    "@nexus/database": "workspace:*",
+    "@nexus/auth": "workspace:*",
     "@node-saml/passport-saml": "^4.0.4",
     "openid-client": "^5.6.1",
     "jsonwebtoken": "^9.0.2",

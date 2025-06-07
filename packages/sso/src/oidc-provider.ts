@@ -1,5 +1,5 @@
 import { Issuer, Client, generators, TokenSet } from 'openid-client'
-import { PrismaClient } from '@nexus-studio/database'
+import { PrismaClient } from '@nexus/database'
 import { SSOConfig, SSOUser, OIDCTokens } from './types'
 
 export class OIDCProvider {

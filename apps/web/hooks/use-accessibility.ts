@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 // Announce route changes to screen readers
@@ -236,5 +236,3 @@ export function useKeyboardShortcuts(shortcuts: Record<string, () => void>) {
 export function ScreenReaderOnly({ children }: { children: React.ReactNode }) {
   return <span className="sr-only">{children}</span>;
 }
-
-import { useState } from 'react';

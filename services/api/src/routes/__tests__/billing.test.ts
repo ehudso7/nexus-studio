@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { Hono } from 'hono'
 import { billing } from '../billing'
-import { prisma } from '@nexus-studio/database'
+import { prisma } from '@nexus/database'
 
 // Mock dependencies
-vi.mock('@nexus-studio/database', () => ({
+vi.mock('@nexus/database', () => ({
   prisma: {
     organizationMember: {
       findFirst: vi.fn()

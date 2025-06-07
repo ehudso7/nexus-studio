@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { BillingService } from '@nexus-studio/billing'
 import { requireAuth } from '../middleware/auth'
-import { prisma } from '@nexus-studio/database'
+import { prisma } from '@nexus/database'
 
 const billing = new Hono()
 

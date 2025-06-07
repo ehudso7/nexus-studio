@@ -1,4 +1,4 @@
-import { PrismaClient } from '@nexus-studio/database'
+import { PrismaClient } from '@nexus/database'
 import { StripeClient } from './stripe-client'
 import Stripe from 'stripe'
 

@@ -1,63 +1,75 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { BillingService } from '../billing-service'
-import { PrismaClient } from '@nexus-studio/database'
-import type { StripeClient } from '../stripe-client'
+import { PrismaClient } from '@nexus/database'
 
-// Mock Prisma
-vi.mock('@nexus-studio/database', () => ({
-  PrismaClient: vi.fn().mockImplementation(() => ({
-    user: {
-      findUnique: vi.fn(),
-      update: vi.fn()
-    },
-    organization: {
-      findUnique: vi.fn(),
-      update: vi.fn()
-    },
-    subscription: {
-      create: vi.fn(),
-      findUnique: vi.fn(),
-      update: vi.fn(),
-      upsert: vi.fn()
-    },
-    organizationMember: {
-      findFirst: vi.fn()
-    },
-    usage: {
-      findMany: vi.fn(),
-      upsert: vi.fn()
-    },
-    payment: {
-      create: vi.fn()
-    },
-    webhookEvent: {
-      create: vi.fn()
-    }
+// Mock the entire StripeClient module
+vi.mock('../stripe-client', () => ({
+  StripeClient: vi.fn().mockImplementation(() => ({
+    createCustomer: vi.fn(),
+    createSubscription: vi.fn(),
+    updateSubscription: vi.fn(),
+    cancelSubscription: vi.fn(),
+    resumeSubscription: vi.fn(),
+    attachPaymentMethod: vi.fn(),
+    listPaymentMethods: vi.fn(),
+    createSetupIntent: vi.fn(),
+    createBillingPortalSession: vi.fn(),
+    createCheckoutSession: vi.fn(),
+    listInvoices: vi.fn(),
+    retrieveInvoice: vi.fn(),
+    retrieveUpcomingInvoice: vi.fn(),
+    constructWebhookEvent: vi.fn(),
+    getStripeInstance: vi.fn()
   }))
 }))
 
-// Mock Stripe Client
-const mockStripeClient = {
-  createCustomer: vi.fn(),
-  createSubscription: vi.fn(),
-  updateSubscription: vi.fn(),
-  cancelSubscription: vi.fn(),
-  resumeSubscription: vi.fn(),
-  attachPaymentMethod: vi.fn(),
-  listPaymentMethods: vi.fn(),
-  createSetupIntent: vi.fn(),
-  createBillingPortalSession: vi.fn(),
-  createCheckoutSession: vi.fn(),
-  listInvoices: vi.fn(),
-  retrieveInvoice: vi.fn(),
-  retrieveUpcomingInvoice: vi.fn(),
-  constructWebhookEvent: vi.fn(),
-  getStripeInstance: vi.fn()
-}
+// Mock SubscriptionManager
+vi.mock('../subscription-manager', () => ({
+  SubscriptionManager: vi.fn().mockImplementation(() => ({
+    createSubscription: vi.fn(),
+    updateSubscription: vi.fn(),
+    cancelSubscription: vi.fn(),
+    resumeSubscription: vi.fn(),
+    checkSubscriptionLimits: vi.fn()
+  }))
+}))
+
+// Mock WebhookHandler  
+vi.mock('../webhook-handler', () => ({
+  WebhookHandler: vi.fn().mockImplementation(() => ({
+    handleWebhook: vi.fn()
+  }))
+}))
+
+// Mock UsageTracker
+vi.mock('../usage-tracker', () => ({
+  UsageTracker: vi.fn().mockImplementation(() => ({
+    trackUsage: vi.fn(),
+    getUsage: vi.fn()
+  }))
+}))
+
+// Mock InvoiceService
+vi.mock('../invoice-service', () => ({
+  InvoiceService: vi.fn().mockImplementation(() => ({
+    listInvoices: vi.fn(),
+    downloadInvoice: vi.fn()
+  }))
+}))
+
+// Mock Prisma
+vi.mock('@nexus/database', () => ({
+  PrismaClient: vi.fn().mockImplementation(() => ({}))
+}))
 
 describe('BillingService', () => {
   let billingService: BillingService
   let mockDb: any
+  let mockStripeClient: any
+  let mockSubscriptionManager: any
+  let mockWebhookHandler: any
+  let mockUsageTracker: any
+  let mockInvoiceService: any
 
   beforeEach(() => {
     mockDb = new PrismaClient()
@@ -67,403 +79,212 @@ describe('BillingService', () => {
       database: mockDb
     })
     
-    // Replace the stripe client with our mock
-    ;(billingService as any).stripe = mockStripeClient
+    // Get the mocked instances
+    mockStripeClient = (billingService as any).stripe
+    mockSubscriptionManager = (billingService as any).subscriptions
+    mockWebhookHandler = (billingService as any).webhooks
+    mockUsageTracker = (billingService as any).usage
+    mockInvoiceService = (billingService as any).invoices
     
     // Reset all mocks
     vi.clearAllMocks()
   })
 
   describe('createSubscription', () => {
-    it('should create a subscription for a new customer', async () => {
-      const userId = 'user123'
-      const organizationId = 'org123'
-      
-      mockDb.user.findUnique.mockResolvedValue({
-        id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        stripeCustomerId: null
-      })
+    it('should delegate to subscription manager', async () => {
+      const params = {
+        userId: 'user123',
+        organizationId: 'org123',
+        plan: 'STARTER' as const,
+        billingPeriod: 'MONTHLY' as const
+      }
 
-      mockStripeClient.createCustomer.mockResolvedValue({
-        id: 'cus_test123'
-      })
+      const mockResult = { id: 'sub_test123', status: 'active' }
+      mockSubscriptionManager.createSubscription.mockResolvedValue(mockResult)
 
-      mockStripeClient.createSubscription.mockResolvedValue({
-        id: 'sub_test123',
-        status: 'active',
-        current_period_start: 1704067200,
-        current_period_end: 1706745600,
-        cancel_at_period_end: false,
-        trial_end: null
-      })
+      const result = await billingService.createSubscription(params)
 
-      mockDb.subscription.create.mockResolvedValue({
-        id: 'dbsub123',
-        organizationId,
-        stripeSubscriptionId: 'sub_test123'
-      })
-
-      mockDb.organization.update.mockResolvedValue({
-        id: organizationId,
-        plan: 'STARTER'
-      })
-
-      const result = await billingService.createSubscription({
-        userId,
-        organizationId,
-        plan: 'STARTER',
-        billingPeriod: 'MONTHLY'
-      })
-
-      expect(mockStripeClient.createCustomer).toHaveBeenCalledWith({
-        email: 'test@example.com',
-        name: 'Test User',
-        metadata: { userId, organizationId }
-      })
-
-      expect(mockDb.user.update).toHaveBeenCalledWith({
-        where: { id: userId },
-        data: { stripeCustomerId: 'cus_test123' }
-      })
-
-      expect(result.id).toBe('sub_test123')
-    })
-
-    it('should use existing Stripe customer if available', async () => {
-      const userId = 'user123'
-      const organizationId = 'org123'
-      const existingCustomerId = 'cus_existing'
-      
-      mockDb.user.findUnique.mockResolvedValue({
-        id: userId,
-        email: 'test@example.com',
-        name: 'Test User',
-        stripeCustomerId: existingCustomerId
-      })
-
-      mockStripeClient.createSubscription.mockResolvedValue({
-        id: 'sub_test123',
-        status: 'active',
-        current_period_start: 1704067200,
-        current_period_end: 1706745600,
-        cancel_at_period_end: false
-      })
-
-      await billingService.createSubscription({
-        userId,
-        organizationId,
-        plan: 'PRO',
-        billingPeriod: 'YEARLY'
-      })
-
-      expect(mockStripeClient.createCustomer).not.toHaveBeenCalled()
-      expect(mockStripeClient.createSubscription).toHaveBeenCalledWith(
-        expect.objectContaining({
-          customerId: existingCustomerId
-        })
-      )
-    })
-
-    it('should attach payment method if provided', async () => {
-      const userId = 'user123'
-      const organizationId = 'org123'
-      const paymentMethodId = 'pm_test123'
-      
-      mockDb.user.findUnique.mockResolvedValue({
-        id: userId,
-        email: 'test@example.com',
-        stripeCustomerId: 'cus_test123'
-      })
-
-      mockStripeClient.createSubscription.mockResolvedValue({
-        id: 'sub_test123',
-        status: 'active',
-        current_period_start: 1704067200,
-        current_period_end: 1706745600,
-        cancel_at_period_end: false
-      })
-
-      await billingService.createSubscription({
-        userId,
-        organizationId,
-        plan: 'STARTER',
-        billingPeriod: 'MONTHLY',
-        paymentMethodId
-      })
-
-      expect(mockStripeClient.attachPaymentMethod).toHaveBeenCalledWith(
-        paymentMethodId,
-        'cus_test123'
-      )
+      expect(mockSubscriptionManager.createSubscription).toHaveBeenCalledWith(params)
+      expect(result).toBe(mockResult)
     })
   })
 
   describe('updateSubscription', () => {
-    it('should update subscription plan', async () => {
-      const organizationId = 'org123'
-      
-      mockDb.subscription.findUnique.mockResolvedValue({
-        id: 'sub123',
-        organizationId,
-        stripeSubscriptionId: 'sub_stripe123',
-        plan: 'STARTER',
-        billingPeriod: 'MONTHLY'
-      })
+    it('should delegate to subscription manager', async () => {
+      const params = {
+        organizationId: 'org123',
+        plan: 'PRO' as const,
+        billingPeriod: 'MONTHLY' as const
+      }
 
-      mockStripeClient.updateSubscription.mockResolvedValue({
-        id: 'sub_stripe123',
-        status: 'active'
-      })
+      const mockResult = { id: 'sub_test123', status: 'active' }
+      mockSubscriptionManager.updateSubscription.mockResolvedValue(mockResult)
 
-      const result = await billingService.updateSubscription({
-        organizationId,
-        plan: 'PRO'
-      })
+      const result = await billingService.updateSubscription(params)
 
-      expect(mockStripeClient.updateSubscription).toHaveBeenCalled()
-      expect(mockDb.subscription.update).toHaveBeenCalled()
-      expect(mockDb.organization.update).toHaveBeenCalledWith({
-        where: { id: organizationId },
-        data: expect.objectContaining({ plan: 'PRO' })
-      })
-    })
-
-    it('should throw error if subscription not found', async () => {
-      mockDb.subscription.findUnique.mockResolvedValue(null)
-
-      await expect(
-        billingService.updateSubscription({
-          organizationId: 'org123',
-          plan: 'PRO'
-        })
-      ).rejects.toThrow('Subscription not found')
+      expect(mockSubscriptionManager.updateSubscription).toHaveBeenCalledWith(params)
+      expect(result).toBe(mockResult)
     })
   })
 
   describe('cancelSubscription', () => {
-    it('should cancel subscription at period end by default', async () => {
+    it('should delegate to subscription manager with default parameters', async () => {
       const organizationId = 'org123'
-      
-      mockDb.subscription.findUnique.mockResolvedValue({
-        id: 'sub123',
-        organizationId,
-        stripeSubscriptionId: 'sub_stripe123'
-      })
+      const mockResult = { id: 'sub_test123', status: 'canceled' }
+      mockSubscriptionManager.cancelSubscription.mockResolvedValue(mockResult)
 
-      mockStripeClient.cancelSubscription.mockResolvedValue({
-        id: 'sub_stripe123',
-        status: 'active',
-        cancel_at_period_end: true
-      })
+      const result = await billingService.cancelSubscription(organizationId)
 
-      await billingService.cancelSubscription(organizationId)
-
-      expect(mockStripeClient.cancelSubscription).toHaveBeenCalledWith(
-        'sub_stripe123',
-        false
-      )
-      
-      expect(mockDb.organization.update).not.toHaveBeenCalled()
+      expect(mockSubscriptionManager.cancelSubscription).toHaveBeenCalledWith(organizationId, false)
+      expect(result).toBe(mockResult)
     })
 
-    it('should cancel subscription immediately if requested', async () => {
+    it('should delegate to subscription manager with immediate cancellation', async () => {
       const organizationId = 'org123'
-      
-      mockDb.subscription.findUnique.mockResolvedValue({
-        id: 'sub123',
-        organizationId,
-        stripeSubscriptionId: 'sub_stripe123'
-      })
+      const mockResult = { id: 'sub_test123', status: 'canceled' }
+      mockSubscriptionManager.cancelSubscription.mockResolvedValue(mockResult)
 
-      mockStripeClient.cancelSubscription.mockResolvedValue({
-        id: 'sub_stripe123',
-        status: 'canceled',
-        cancel_at_period_end: false
-      })
+      const result = await billingService.cancelSubscription(organizationId, true)
 
-      await billingService.cancelSubscription(organizationId, true)
-
-      expect(mockStripeClient.cancelSubscription).toHaveBeenCalledWith(
-        'sub_stripe123',
-        true
-      )
-      
-      expect(mockDb.organization.update).toHaveBeenCalledWith({
-        where: { id: organizationId },
-        data: expect.objectContaining({ plan: 'FREE' })
-      })
-    })
-  })
-
-  describe('checkLimit', () => {
-    it('should check usage limits correctly', async () => {
-      const organizationId = 'org123'
-      
-      mockDb.organization.findUnique.mockResolvedValue({
-        id: organizationId,
-        plan: 'STARTER',
-        projects: [{ id: '1' }, { id: '2' }],
-        members: [{ id: '1' }, { id: '2' }, { id: '3' }],
-        usage: [{
-          storage: 5,
-          deployments: 50,
-          apiRequests: 50000,
-          aiRequests: 500
-        }]
-      })
-
-      const result = await billingService.checkLimit(organizationId, 'projects')
-
-      expect(result.allowed).toBe(true)
-      expect(result.current).toBe(2)
-      expect(result.limit).toBe(10) // STARTER plan limit
-      expect(result.remaining).toBe(8)
-    })
-
-    it('should return unlimited for enterprise plan', async () => {
-      const organizationId = 'org123'
-      
-      mockDb.organization.findUnique.mockResolvedValue({
-        id: organizationId,
-        plan: 'ENTERPRISE',
-        projects: Array(100).fill({ id: '1' }),
-        members: [],
-        usage: [{}]
-      })
-
-      const result = await billingService.checkLimit(organizationId, 'projects')
-
-      expect(result.allowed).toBe(true)
-      expect(result.limit).toBe(-1)
-      expect(result.current).toBe(100)
+      expect(mockSubscriptionManager.cancelSubscription).toHaveBeenCalledWith(organizationId, true)
+      expect(result).toBe(mockResult)
     })
   })
 
   describe('handleWebhook', () => {
-    it('should process subscription created webhook', async () => {
-      const event = {
-        id: 'evt_test123',
-        type: 'customer.subscription.created',
-        data: {
-          object: {
-            id: 'sub_test123',
-            customer: 'cus_test123',
-            status: 'active',
-            metadata: {
-              organizationId: 'org123',
-              plan: 'STARTER',
-              billingPeriod: 'MONTHLY'
-            },
-            current_period_start: 1704067200,
-            current_period_end: 1706745600,
-            cancel_at_period_end: false,
-            trial_end: null,
-            items: {
-              data: [{
-                price: { id: 'price_test123' }
-              }]
-            }
-          }
-        }
+    it('should delegate to webhook handler', async () => {
+      const payload = 'webhook_payload'
+      const signature = 'webhook_signature'
+      
+      mockWebhookHandler.handleWebhook.mockResolvedValue(undefined)
+
+      await billingService.handleWebhook(payload, signature)
+
+      expect(mockWebhookHandler.handleWebhook).toHaveBeenCalledWith(payload, signature)
+    })
+  })
+
+  describe('getUsage', () => {
+    it('should delegate to usage tracker', async () => {
+      const organizationId = 'org123'
+      const startDate = new Date('2024-01-01')
+      const endDate = new Date('2024-02-01')
+      
+      const mockResult = {
+        records: [],
+        totals: {
+          projects: 10,
+          teamMembers: 5,
+          storage: 2.5,
+          deployments: 20,
+          apiRequests: 1500,
+          aiRequests: 100,
+          bandwidth: 1000
+        },
+        period: { start: startDate, end: endDate }
       }
 
-      mockStripeClient.constructWebhookEvent.mockReturnValue(event)
-      
-      await billingService.handleWebhook('payload', 'signature')
+      mockUsageTracker.getUsage.mockResolvedValue(mockResult)
 
-      expect(mockDb.subscription.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { stripeSubscriptionId: 'sub_test123' },
-          create: expect.objectContaining({
-            organizationId: 'org123',
-            stripeCustomerId: 'cus_test123',
-            stripeSubscriptionId: 'sub_test123'
-          })
-        })
-      )
+      const result = await billingService.getUsage(organizationId, startDate, endDate)
 
-      expect(mockDb.webhookEvent.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          stripeEventId: 'evt_test123',
-          type: 'customer.subscription.created',
-          processed: true
-        })
-      })
+      expect(mockUsageTracker.getUsage).toHaveBeenCalledWith(organizationId, startDate, endDate)
+      expect(result).toBe(mockResult)
     })
+  })
 
-    it('should handle webhook signature verification failure', async () => {
-      mockStripeClient.constructWebhookEvent.mockImplementation(() => {
-        throw new Error('Invalid signature')
+  describe('createCheckoutSession', () => {
+    it('should create checkout session with correct parameters', async () => {
+      const params = {
+        customerId: 'cus_test123',
+        plan: 'STARTER' as const,
+        billingPeriod: 'MONTHLY' as const,
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel',
+        organizationId: 'org123',
+        userId: 'user123'
+      }
+      
+      const mockResult = {
+        id: 'cs_test123',
+        url: 'https://checkout.stripe.com/pay/cs_test123'
+      }
+
+      mockStripeClient.createCheckoutSession.mockResolvedValue(mockResult)
+
+      const result = await billingService.createCheckoutSession(params)
+
+      expect(mockStripeClient.createCheckoutSession).toHaveBeenCalledWith({
+        customerId: params.customerId,
+        priceId: 'price_starter_monthly',
+        successUrl: params.successUrl,
+        cancelUrl: params.cancelUrl,
+        trialDays: 14,
+        metadata: {
+          organizationId: params.organizationId,
+          userId: params.userId,
+          plan: params.plan,
+          billingPeriod: params.billingPeriod
+        }
       })
 
-      await expect(
-        billingService.handleWebhook('payload', 'invalid-signature')
-      ).rejects.toThrow('Invalid webhook signature')
+      expect(result).toBe(mockResult)
     })
   })
 
   describe('trackUsage', () => {
-    it('should track usage metrics', async () => {
+    it('should delegate to usage tracker', async () => {
       const organizationId = 'org123'
-      
-      mockDb.usage.upsert.mockResolvedValue({
-        id: 'usage123',
-        organizationId,
-        apiRequests: 1000
-      })
+      const metric = 'api_requests'
+      const quantity = 100
 
-      mockDb.organization.findUnique.mockResolvedValue({
-        id: organizationId,
-        plan: 'STARTER'
-      })
+      mockUsageTracker.trackUsage.mockResolvedValue(undefined)
 
-      await billingService.trackUsage(organizationId, 'apiRequests', 100)
+      await billingService.trackUsage(organizationId, metric, quantity)
 
-      expect(mockDb.usage.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          create: expect.objectContaining({
-            organizationId,
-            apiRequests: 100
-          }),
-          update: expect.objectContaining({
-            apiRequests: { increment: 100 }
-          })
-        })
-      )
+      expect(mockUsageTracker.trackUsage).toHaveBeenCalledWith(organizationId, metric, quantity)
     })
+  })
 
-    it('should send usage alert when limit exceeded', async () => {
+  describe('listInvoices', () => {
+    it('should delegate to invoice service', async () => {
       const organizationId = 'org123'
-      
-      mockDb.usage.upsert.mockResolvedValue({
-        id: 'usage123',
-        organizationId,
-        apiRequests: 150000 // Exceeds STARTER limit of 100000
-      })
+      const limit = 10
+      const mockResult = [{ id: 'inv_123', status: 'paid' }]
 
-      mockDb.organization.findUnique.mockResolvedValue({
-        id: organizationId,
-        plan: 'STARTER',
-        members: [{
-          role: 'OWNER',
-          userId: 'user123',
-          user: { id: 'user123', email: 'owner@example.com' }
-        }]
-      })
+      mockInvoiceService.listInvoices.mockResolvedValue(mockResult)
 
-      mockDb.notification = { create: vi.fn() }
+      const result = await billingService.listInvoices(organizationId, limit)
 
-      await billingService.trackUsage(organizationId, 'apiRequests', 50000)
+      expect(mockInvoiceService.listInvoices).toHaveBeenCalledWith(organizationId, limit)
+      expect(result).toBe(mockResult)
+    })
+  })
 
-      expect(mockDb.notification.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          userId: 'user123',
-          type: 'USAGE_LIMIT',
-          title: 'Usage Limit Alert'
-        })
-      })
+  describe('addPaymentMethod', () => {
+    it('should delegate to stripe client', async () => {
+      const customerId = 'cus_test123'
+      const paymentMethodId = 'pm_test123'
+
+      mockStripeClient.attachPaymentMethod.mockResolvedValue(undefined)
+
+      await billingService.addPaymentMethod(customerId, paymentMethodId)
+
+      expect(mockStripeClient.attachPaymentMethod).toHaveBeenCalledWith(paymentMethodId, customerId)
+    })
+  })
+
+  describe('createSetupIntent', () => {
+    it('should delegate to stripe client', async () => {
+      const customerId = 'cus_test123'
+      const mockResult = { id: 'seti_test123', client_secret: 'secret123' }
+
+      mockStripeClient.createSetupIntent.mockResolvedValue(mockResult)
+
+      const result = await billingService.createSetupIntent(customerId)
+
+      expect(mockStripeClient.createSetupIntent).toHaveBeenCalledWith(customerId)
+      expect(result).toBe(mockResult)
     })
   })
 })

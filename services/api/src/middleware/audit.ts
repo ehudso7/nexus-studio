@@ -1,6 +1,6 @@
 import { Context, Next } from 'hono'
-import { AuditLogger } from '@nexus-studio/database/src/audit-logger'
-import { prisma } from '@nexus-studio/database'
+import { AuditLogger } from '@nexus/database/src/audit-logger'
+import { prisma } from '@nexus/database'
 
 const auditLogger = new AuditLogger(prisma)
 

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { SSOManager } from '@nexus-studio/sso'
 import { requireAuth } from '../middleware/auth'
-import { prisma } from '@nexus-studio/database'
+import { prisma } from '@nexus/database'
 import jwt from 'jsonwebtoken'
 
 const sso = new Hono()

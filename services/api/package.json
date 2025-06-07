@@ -25,7 +25,7 @@
     "@anthropic-ai/sdk": "^0.17.0",
     "winston": "^3.11.0",
     "@nexus-studio/billing": "workspace:*",
-    "@nexus-studio/database": "workspace:*"
+    "@nexus/database": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
